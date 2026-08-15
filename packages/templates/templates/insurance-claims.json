@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 1,
+  "id": "insurance-claims",
+  "name": "Insurance claims (FNOL to settlement)",
+  "description": "First notice of loss is captured and documents checked, then claims are adjudicated — straightforward ones by the adjuster pool, complex ones by senior adjusters — and payment is issued. Intake, standard adjudication, and payment are agentification candidates; escalations route to the senior adjudication queue.",
+  "pools": [
+    { "id": "intake-team", "name": "Intake team", "capacity": 3, "hourlyCostPerServer": 30 },
+    { "id": "adjusters", "name": "Claims adjusters", "capacity": 5, "hourlyCostPerServer": 48 },
+    { "id": "senior-adjusters", "name": "Senior adjusters", "capacity": 4, "hourlyCostPerServer": 65 }
+  ],
+  "nodes": [
+    {
+      "id": "arrivals",
+      "kind": "source",
+      "name": "Claims received (FNOL)",
+      "out": "intake",
+      "arrival": { "kind": "poisson", "ratePerHour": 8 }
+    },
+    {
+      "id": "intake",
+      "kind": "activity",
+      "name": "Intake & document check",
+      "out": "coverage",
+      "execution": "human",
+      "human": {
+        "poolId": "intake-team",
+        "serviceTime": { "kind": "lognormal", "mean": 0.2, "cv": 0.6 }
+      },
+      "agent": {
+        "serviceTime": { "kind": "constant", "value": 0.006 },
+        "costPerCase": 0.1,
+        "escalation": { "probability": 0.05, "toNodeId": "senior-adjudication" }
+      }
+    },
+    {
+      "id": "coverage",
+      "kind": "gateway",
+      "name": "Coverage check",
+      "branches": [
+        { "to": "adjudicate", "probability": 0.8 },
+        { "to": "senior-adjudication", "probability": 0.2 }
+      ]
+    },
+    {
+      "id": "adjudicate",
+      "kind": "activity",
+      "name": "Standard adjudication",
+      "out": "payment",
+      "execution": "human",
+      "human": {
+        "poolId": "adjusters",
+        "serviceTime": { "kind": "lognormal", "mean": 0.5, "cv": 0.8 }
+      },
+      "agent": {
+        "serviceTime": { "kind": "constant", "value": 0.02 },
+        "costPerCase": 0.4,
+        "escalation": { "probability": 0.15, "toNodeId": "senior-adjudication" }
+      }
+    },
+    {
+      "id": "senior-adjudication",
+      "kind": "activity",
+      "name": "Senior adjudication",
+      "out": "payment",
+      "execution": "human",
+      "human": {
+        "poolId": "senior-adjusters",
+        "serviceTime": { "kind": "lognormal", "mean": 1.2, "cv": 0.6 }
+      }
+    },
+    {
+      "id": "payment",
+      "kind": "activity",
+      "name": "Issue payment",
+      "out": "done",
+      "execution": "human",
+      "human": {
+        "poolId": "intake-team",
+        "serviceTime": { "kind": "constant", "value": 0.05 }
+      },
+      "agent": {
+        "serviceTime": { "kind": "constant", "value": 0.003 },
+        "costPerCase": 0.02
+      }
+    },
+    { "id": "done", "kind": "sink", "name": "Claim settled" }
+  ]
+}

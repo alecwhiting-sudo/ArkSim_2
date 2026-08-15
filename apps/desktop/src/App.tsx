@@ -1,24 +1,27 @@
 import type { RunResult } from "@fabsim/schema";
-import { agentifyAllScenario, templates } from "@fabsim/templates";
-import { useCallback, useEffect, useRef, useState } from "react";
-
-const config = { durationHours: 700, warmupHours: 100, replications: 5, seed: 42 };
-
-type WorkerReply =
-  | { ok: true; result: RunResult }
-  | { ok: false; error: string };
-
-const fmtH = (h: number) => (h < 1 ? `${(h * 60).toFixed(1)} min` : `${h.toFixed(2)} h`);
-const pct = (x: number) => `${(x * 100).toFixed(0)}%`;
+import { templates } from "@fabsim/templates";
+import { useCallback, useEffect, useRef } from "react";
+import { Canvas } from "./components/Canvas";
+import { Dashboard } from "./components/Dashboard";
+import { Inspector } from "./components/Inspector";
+import { downloadProject, openProjectFile } from "./persistence";
+import { scenarioFromOverrides, useFabStore } from "./store";
+import type { WorkerReply, WorkerRequest } from "./worker";
 
 export function App() {
-  const model = templates[0]!;
-  const [baseline, setBaseline] = useState<RunResult | null>(null);
-  const [agentified, setAgentified] = useState<RunResult | null>(null);
-  const [running, setRunning] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const workerRef = useRef<Worker | null>(null);
+  const templateId = useFabStore((s) => s.templateId);
+  const config = useFabStore((s) => s.config);
+  const running = useFabStore((s) => s.running);
+  const error = useFabStore((s) => s.error);
+  const overrideCount = useFabStore((s) => Object.keys(s.overrides).length);
+  const loadTemplate = useFabStore((s) => s.loadTemplate);
+  const loadProject = useFabStore((s) => s.loadProject);
+  const setConfig = useFabStore((s) => s.setConfig);
+  const setRunning = useFabStore((s) => s.setRunning);
+  const setError = useFabStore((s) => s.setError);
+  const setResults = useFabStore((s) => s.setResults);
 
+  const workerRef = useRef<Worker | null>(null);
   useEffect(() => {
     const w = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
     workerRef.current = w;
@@ -27,148 +30,123 @@ export function App() {
 
   const run = useCallback(() => {
     const w = workerRef.current;
-    if (!w || running) return;
+    if (!w || useFabStore.getState().running) return;
+    const { model, config, overrides } = useFabStore.getState();
+    const scenario = scenarioFromOverrides(overrides);
     setRunning(true);
-    setError(null);
-    setBaseline(null);
-    setAgentified(null);
-    const results: RunResult[] = [];
+
+    const results = new Map<string, RunResult>();
+    const expected = scenario ? 2 : 1;
     w.onmessage = (e: MessageEvent<WorkerReply>) => {
       if (!e.data.ok) {
         setError(e.data.error);
-        setRunning(false);
         return;
       }
-      results.push(e.data.result);
-      if (results.length === 1) {
-        setBaseline(results[0]!);
-      } else {
-        setAgentified(results[1]!);
-        setRunning(false);
+      results.set(e.data.id, e.data.result);
+      if (results.size === expected) {
+        setResults(results.get("baseline")!, results.get("scenario") ?? null);
       }
     };
-    w.postMessage({ model, config });
-    w.postMessage({ model, config, scenario: agentifyAllScenario(model) });
-  }, [model, running]);
+    w.postMessage({ id: "baseline", opts: { model, config } } satisfies WorkerRequest);
+    if (scenario) {
+      w.postMessage({ id: "scenario", opts: { model, config, scenario } } satisfies WorkerRequest);
+    }
+  }, [setError, setResults, setRunning]);
+
+  const save = useCallback(() => {
+    const { model, overrides, config } = useFabStore.getState();
+    downloadProject({ model, overrides, config });
+  }, []);
+
+  const open = useCallback(() => {
+    openProjectFile(
+      (p) => loadProject(p.model, p.overrides, p.config),
+      (msg) => setError(`Could not open project: ${msg}`),
+    );
+  }, [loadProject, setError]);
 
   return (
-    <main style={styles.page}>
-      <header>
-        <h1 style={styles.h1}>FabSim</h1>
-        <p style={styles.sub}>
-          Walking skeleton — {model.name}, simulated {config.durationHours}h ×{" "}
-          {config.replications} replications, baseline vs. all candidate steps agentified.
-        </p>
-      </header>
-      <button style={styles.button} onClick={run} disabled={running}>
-        {running ? "Simulating…" : "Run baseline vs. agentified"}
-      </button>
-      {error && <p style={{ color: "#b04a2a" }}>{error}</p>}
-      <div style={styles.cols}>
-        <ResultCard title="Baseline (human)" result={baseline} />
-        <ResultCard title="Agentified" result={agentified} baseline={baseline} />
-      </div>
-    </main>
-  );
-}
-
-function ResultCard({
-  title,
-  result,
-  baseline,
-}: {
-  title: string;
-  result: RunResult | null;
-  baseline?: RunResult | null;
-}) {
-  return (
-    <section style={styles.card}>
-      <h2 style={styles.h2}>{title}</h2>
-      {!result ? (
-        <p style={styles.sub}>No results yet.</p>
-      ) : (
-        <dl style={styles.dl}>
-          <Kpi
-            label="Cycle time (mean)"
-            value={fmtH(result.cycleTimeHours.mean.mean)}
-            delta={baseline ? result.cycleTimeHours.mean.mean / baseline.cycleTimeHours.mean.mean - 1 : null}
-          />
-          <Kpi label="Cycle time (P90)" value={fmtH(result.cycleTimeHours.p90)} />
-          <Kpi
-            label="Throughput"
-            value={`${result.throughputPerHour.mean.toFixed(1)} / h`}
-          />
-          <Kpi
-            label="Cost per case"
-            value={`$${result.cost.perCase.toFixed(2)}`}
-            delta={baseline ? result.cost.perCase / baseline.cost.perCase - 1 : null}
-          />
-          <Kpi label="Agent cost share" value={pct(result.cost.agentShare)} />
-          <Kpi label="Escalated cases" value={String(result.counts.escalated)} />
-          {result.pools
-            .filter((p) => p.utilization !== null)
-            .map((p) => (
-              <Kpi key={p.poolId} label={`Utilization — ${p.poolId}`} value={pct(p.utilization!)} />
+    <div className="app">
+      <header className="topbar">
+        <div className="topbar__brand">FabSim</div>
+        <label className="topbar__field">
+          Template
+          <select value={templateId} onChange={(e) => loadTemplate(e.target.value)}>
+            {templates.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
             ))}
-        </dl>
-      )}
-    </section>
-  );
-}
+          </select>
+        </label>
+        <button type="button" className="btn" onClick={open}>
+          Open…
+        </button>
+        <button type="button" className="btn" onClick={save}>
+          Save
+        </button>
+        <div className="topbar__spacer" />
+        <label className="topbar__field">
+          Sim hours
+          <input
+            type="number"
+            min={10}
+            step={50}
+            value={config.durationHours}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              if (v > config.warmupHours) setConfig({ durationHours: v });
+            }}
+          />
+        </label>
+        <label className="topbar__field">
+          Replications
+          <input
+            type="number"
+            min={1}
+            max={50}
+            step={1}
+            value={config.replications}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              if (v >= 1 && v <= 50) setConfig({ replications: v });
+            }}
+          />
+        </label>
+        <label className="topbar__field">
+          Seed
+          <input
+            type="number"
+            min={0}
+            step={1}
+            value={config.seed}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              if (v >= 0) setConfig({ seed: v });
+            }}
+          />
+        </label>
+        <button type="button" className="btn btn--primary" onClick={run} disabled={running}>
+          {running
+            ? "Simulating…"
+            : overrideCount > 0
+              ? `Run baseline vs. scenario (${overrideCount})`
+              : "Run baseline"}
+        </button>
+      </header>
 
-function Kpi({ label, value, delta }: { label: string; value: string; delta?: number | null }) {
-  return (
-    <div style={styles.kpi}>
-      <dt style={styles.dt}>{label}</dt>
-      <dd style={styles.dd}>
-        {value}
-        {delta != null && Number.isFinite(delta) && (
-          <span style={{ color: delta <= 0 ? "#116b62" : "#b04a2a", marginLeft: 8, fontSize: 13 }}>
-            {delta > 0 ? "+" : ""}
-            {(delta * 100).toFixed(0)}%
-          </span>
-        )}
-      </dd>
+      {error && (
+        <div className="errorbar" role="alert">
+          {error}
+        </div>
+      )}
+
+      <main className="workbench">
+        <Canvas />
+        <Inspector />
+      </main>
+
+      <Dashboard />
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  page: {
-    fontFamily: "system-ui, sans-serif",
-    maxWidth: 900,
-    margin: "0 auto",
-    padding: "2rem 1.5rem",
-    color: "#20282b",
-  },
-  h1: { margin: "0 0 0.25rem", fontSize: "1.8rem" },
-  h2: { margin: "0 0 0.75rem", fontSize: "1.1rem" },
-  sub: { color: "#5c6b6c", margin: "0 0 1rem" },
-  button: {
-    padding: "0.6rem 1.2rem",
-    fontSize: "1rem",
-    borderRadius: 6,
-    border: "1px solid #116b62",
-    background: "#116b62",
-    color: "#fff",
-    cursor: "pointer",
-    marginBottom: "1.5rem",
-  },
-  cols: { display: "flex", gap: "1.5rem", flexWrap: "wrap" },
-  card: {
-    flex: "1 1 320px",
-    border: "1px solid #d8dedb",
-    borderRadius: 8,
-    padding: "1rem 1.25rem",
-    background: "#fbfcfb",
-  },
-  dl: { margin: 0 },
-  kpi: {
-    display: "flex",
-    justifyContent: "space-between",
-    borderBottom: "1px solid #eef2f0",
-    padding: "0.4rem 0",
-  },
-  dt: { color: "#5c6b6c", fontSize: 14 },
-  dd: { margin: 0, fontVariantNumeric: "tabular-nums", fontWeight: 600 },
-};

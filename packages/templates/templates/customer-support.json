@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "id": "customer-support",
+  "name": "Customer support ticket handling",
+  "description": "Tickets are triaged, then resolved by L1 for routine issues or L2 for complex ones. Triage and routine resolution are agentification candidates; agent escalations land on the L2 queue, so watch L2 utilization in agentified scenarios.",
+  "pools": [
+    { "id": "l1-agents", "name": "L1 support", "capacity": 8, "hourlyCostPerServer": 28 },
+    { "id": "l2-engineers", "name": "L2 engineers", "capacity": 5, "hourlyCostPerServer": 40 }
+  ],
+  "nodes": [
+    {
+      "id": "arrivals",
+      "kind": "source",
+      "name": "Tickets received",
+      "out": "triage",
+      "arrival": { "kind": "poisson", "ratePerHour": 25 }
+    },
+    {
+      "id": "triage",
+      "kind": "activity",
+      "name": "Triage & routing",
+      "out": "route",
+      "execution": "human",
+      "human": {
+        "poolId": "l1-agents",
+        "serviceTime": { "kind": "lognormal", "mean": 0.08, "cv": 0.5 }
+      },
+      "agent": {
+        "serviceTime": { "kind": "constant", "value": 0.003 },
+        "costPerCase": 0.03,
+        "escalation": { "probability": 0.05, "toNodeId": "complex-resolve" }
+      }
+    },
+    {
+      "id": "route",
+      "kind": "gateway",
+      "name": "Complexity",
+      "branches": [
+        { "to": "simple-resolve", "probability": 0.8 },
+        { "to": "complex-resolve", "probability": 0.2 }
+      ]
+    },
+    {
+      "id": "simple-resolve",
+      "kind": "activity",
+      "name": "Resolve routine issue",
+      "out": "done",
+      "execution": "human",
+      "human": {
+        "poolId": "l1-agents",
+        "serviceTime": { "kind": "lognormal", "mean": 0.25, "cv": 0.8 }
+      },
+      "agent": {
+        "serviceTime": { "kind": "constant", "value": 0.01 },
+        "costPerCase": 0.15,
+        "escalation": { "probability": 0.08, "toNodeId": "complex-resolve" }
+      }
+    },
+    {
+      "id": "complex-resolve",
+      "kind": "activity",
+      "name": "Resolve complex issue",
+      "out": "done",
+      "execution": "human",
+      "human": {
+        "poolId": "l2-engineers",
+        "serviceTime": { "kind": "lognormal", "mean": 0.6, "cv": 0.7 }
+      }
+    },
+    { "id": "done", "kind": "sink", "name": "Ticket closed" }
+  ]
+}

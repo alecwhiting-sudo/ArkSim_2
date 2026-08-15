@@ -1,10 +1,14 @@
 import { processModelSchema, type ProcessModel, type Scenario } from "@fabsim/schema";
+import customerSupport from "../templates/customer-support.json";
+import insuranceClaims from "../templates/insurance-claims.json";
 import invoiceProcessing from "../templates/invoice-processing.json";
 
 /** All shipped templates, validated at load time. Templates are data, not code. */
-export const templates: ProcessModel[] = [invoiceProcessing].map((t) =>
-  processModelSchema.parse(t),
-);
+export const templates: ProcessModel[] = [
+  invoiceProcessing,
+  customerSupport,
+  insuranceClaims,
+].map((t) => processModelSchema.parse(t));
 
 export function templateById(id: string): ProcessModel {
   const t = templates.find((m) => m.id === id);
