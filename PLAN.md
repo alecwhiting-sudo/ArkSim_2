@@ -255,3 +255,23 @@ streams within phases 1–2 are largely independent.
 | Garbage-in on agent performance assumptions | Sensitivity analysis as a first-class feature; templates ship with sourced default ranges, not point estimates |
 | Cross-platform packaging/signing friction | Walking skeleton builds installers on both OSes in Phase 0, not at the end; certs ordered early |
 | Simulation performance on large models | Engine in Web Worker (UI never blocks); deterministic engine makes a later Rust/WASM port a drop-in swap if ever needed |
+
+---
+
+## Status (updated 2026-08-15)
+
+- **Phase 0 — done.** Monorepo, schema contracts, deterministic engine with Erlang-C
+  oracle + property + golden-pin tests, CI, release pipeline (installers verified
+  building on macOS + Windows).
+- **Phase 1 — done.** Canvas with human/agent toggles, inspector editing, worker-run
+  baseline-vs-scenario comparison, dashboards, `.fabsim.json` save/open.
+- **Phase 2 — done.** Live **watch mode** (replay with play/pause/speed/scrub, live
+  queue counters, WIP chart) — added beyond the original plan; scenario manager with
+  compare-all; demand multiplier; CIs in UI; all 12 templates; CSV import via
+  empirical distributions.
+- **Phase 3 — done** except auto-updater + signing (blocked on certificates):
+  sensitivity/tornado analysis, SLA attainment KPI, HITL review sampling in the
+  engine/schema, HTML report + CSV export, first-run tour, user guide.
+- **Open items:** code signing + notarization certificates (unblocks auto-updater),
+  XLSX export, canvas node add/remove editing, shift calendars, per-case attributes
+  for rule-based hybrid routing.

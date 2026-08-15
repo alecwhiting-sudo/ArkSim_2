@@ -3,6 +3,7 @@ import type { ProcessModel, RunConfig, RunResult, Scenario } from "@fabsim/schem
 import { templates } from "@fabsim/templates";
 import { create } from "zustand";
 import type { ReplaySnapshot } from "./replay";
+import type { SensitivityResults } from "./sensitivity";
 
 export type ExecutionMode = "human" | "agent";
 
@@ -35,6 +36,7 @@ export interface FabState {
   baseline: RunResult | null;
   scenario: RunResult | null;
   compareResults: { name: string; result: RunResult }[] | null;
+  sensResults: SensitivityResults | null;
   /** Bumped whenever the model/overrides change, so results are marked stale. */
   resultsStale: boolean;
   /** Watch mode: the recorded trace and the live replay snapshot. */
@@ -62,6 +64,7 @@ export interface FabState {
   setError: (error: string | null) => void;
   setResults: (baseline: RunResult, scenario: RunResult | null) => void;
   setCompareResults: (rows: { name: string; result: RunResult }[]) => void;
+  setSensResults: (r: SensitivityResults) => void;
   setWatchTrace: (trace: TraceResult | null) => void;
   publishWatch: (snap: ReplaySnapshot, playing: boolean) => void;
 }
@@ -81,6 +84,7 @@ export const useFabStore = create<FabState>((set) => ({
   baseline: null,
   scenario: null,
   compareResults: null,
+  sensResults: null,
   resultsStale: false,
   watchTrace: null,
   watchSnap: null,
@@ -99,6 +103,7 @@ export const useFabStore = create<FabState>((set) => ({
       baseline: null,
       scenario: null,
       compareResults: null,
+      sensResults: null,
       error: null,
       resultsStale: false,
       watchTrace: null,
@@ -119,6 +124,7 @@ export const useFabStore = create<FabState>((set) => ({
       baseline: null,
       scenario: null,
       compareResults: null,
+      sensResults: null,
       error: null,
       resultsStale: false,
       watchTrace: null,
@@ -178,6 +184,7 @@ export const useFabStore = create<FabState>((set) => ({
     set({ baseline, scenario, running: false, error: null, resultsStale: false }),
   setCompareResults: (rows) =>
     set({ compareResults: rows, running: false, error: null, resultsStale: false }),
+  setSensResults: (r) => set({ sensResults: r, running: false, error: null }),
   setWatchTrace: (trace) =>
     set({ watchTrace: trace, watchSnap: null, watchPlaying: false, running: false }),
   publishWatch: (snap, playing) => set({ watchSnap: snap, watchPlaying: playing }),

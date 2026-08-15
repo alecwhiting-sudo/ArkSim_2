@@ -1,39 +1,7 @@
-import type { Distribution, ProcessModel, ProcessNode } from "@fabsim/schema";
+import type { ProcessModel, ProcessNode } from "@fabsim/schema";
+import { parseDurationsCsv, pickCsvFile } from "../csv";
+import { primaryOf, withPrimary } from "../distribution-util";
 import { effectiveMode, useFabStore } from "../store";
-
-/** The single "headline duration" a non-specialist edits; the distribution scales around it. */
-function primaryOf(d: Distribution): number {
-  switch (d.kind) {
-    case "constant":
-      return d.value;
-    case "exponential":
-    case "lognormal":
-      return d.mean;
-    case "uniform":
-      return (d.min + d.max) / 2;
-    case "triangular":
-      return (d.min + d.mode + d.max) / 3;
-  }
-}
-
-function withPrimary(d: Distribution, value: number): Distribution {
-  if (value <= 0) return d;
-  switch (d.kind) {
-    case "constant":
-      return { ...d, value };
-    case "exponential":
-    case "lognormal":
-      return { ...d, mean: value };
-    case "uniform": {
-      const f = value / primaryOf(d);
-      return { ...d, min: d.min * f, max: d.max * f };
-    }
-    case "triangular": {
-      const f = value / primaryOf(d);
-      return { ...d, min: d.min * f, mode: d.mode * f, max: d.max * f };
-    }
-  }
-}
 
 function replaceNode(model: ProcessModel, id: string, next: ProcessNode): ProcessModel {
   return { ...model, nodes: model.nodes.map((n) => (n.id === id ? next : n)) };
@@ -128,7 +96,11 @@ export function Inspector() {
             </p>
             <h3 className="inspector__sub">Human profile — pool {node.human.poolId}</h3>
             <NumberField
-              label={`Typical duration (${node.human.serviceTime.kind})`}
+              label={`Typical duration (${node.human.serviceTime.kind}${
+                node.human.serviceTime.kind === "empirical"
+                  ? `, ${node.human.serviceTime.values.length} obs`
+                  : ""
+              })`}
               value={primaryOf(node.human.serviceTime)}
               suffix="h"
               onCommit={(v) =>
@@ -141,6 +113,31 @@ export function Inspector() {
                 )
               }
             />
+            <button
+              type="button"
+              className="btn btn--small"
+              onClick={() =>
+                pickCsvFile((text, filename) => {
+                  const raw = parseDurationsCsv(text);
+                  if (raw.length === 0) {
+                    window.alert(`No numeric durations found in ${filename}.`);
+                    return;
+                  }
+                  const minutes = window.confirm(
+                    `Imported ${raw.length} durations from ${filename}.\n\nOK = values are MINUTES, Cancel = values are HOURS.`,
+                  );
+                  const values = minutes ? raw.map((v) => v / 60) : raw;
+                  updateModel((m) =>
+                    replaceNode(m, node.id, {
+                      ...node,
+                      human: { ...node.human, serviceTime: { kind: "empirical", values } },
+                    }),
+                  );
+                })
+              }
+            >
+              Import observed durations (CSV)…
+            </button>
             {node.agent ? (
               <>
                 <h3 className="inspector__sub">Agent profile</h3>

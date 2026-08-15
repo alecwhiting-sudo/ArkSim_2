@@ -1,6 +1,8 @@
 import type { RunResult } from "@fabsim/schema";
 import { fmtHours, fmtMoney, fmtNum, fmtPct } from "../format";
+import { buildComparisonCsv, buildReportHtml, downloadText } from "../report";
 import { useFabStore } from "../store";
+import { Tornado } from "./Tornado";
 
 
 /**
@@ -12,8 +14,10 @@ export function Dashboard() {
   const baseline = useFabStore((s) => s.baseline);
   const scenario = useFabStore((s) => s.scenario);
   const compare = useFabStore((s) => s.compareResults);
+  const sens = useFabStore((s) => s.sensResults);
   const stale = useFabStore((s) => s.resultsStale);
   const model = useFabStore((s) => s.model);
+  const config = useFabStore((s) => s.config);
 
   if (!baseline) {
     return (
@@ -29,6 +33,30 @@ export function Dashboard() {
   const ciHalf = (r: RunResult) =>
     (r.cycleTimeHours.mean.ci95[1] - r.cycleTimeHours.mean.ci95[0]) / 2;
 
+  const exportReport = () => {
+    const html = buildReportHtml({
+      model,
+      config,
+      baseline,
+      scenario,
+      compare,
+      sensitivity: sens,
+      generatedAt: new Date().toLocaleString(),
+    });
+    downloadText(`fabsim-${model.id}-report.html`, html, "text/html");
+  };
+
+  const exportCsv = () => {
+    const rows =
+      compare && compare.length > 0
+        ? compare
+        : [
+            { name: "Baseline", result: baseline },
+            ...(scenario ? [{ name: "Workbench scenario", result: scenario }] : []),
+          ];
+    downloadText(`fabsim-${model.id}-results.csv`, buildComparisonCsv(model, rows), "text/csv");
+  };
+
   const declaredPools = new Set(model.pools.map((p) => p.id));
 
   return (
@@ -36,6 +64,17 @@ export function Dashboard() {
       {stale && (
         <div className="dashboard__stale">Model or scenario changed since this run — re-run to refresh.</div>
       )}
+      <div className="dashboard__actions">
+        <button type="button" className="btn btn--small" onClick={exportReport}>
+          Export report (HTML)
+        </button>
+        <button type="button" className="btn btn--small" onClick={exportCsv}>
+          Export results (CSV)
+        </button>
+        <span className="dashboard__actions-hint">
+          Open the report in a browser and print to get a PDF.
+        </span>
+      </div>
       <div className="tiles">
         <Tile
           label="Cycle time (mean)"
@@ -67,9 +106,36 @@ export function Dashboard() {
           label="Escalated to humans"
           value={String(baseline.counts.escalated)}
           scenarioValue={scenario ? String(scenario.counts.escalated) : undefined}
-          sub="cases handed back by agents"
+          sub={`cases handed back by agents${
+            (scenario ?? baseline).counts.reviewed > 0
+              ? ` · +${(scenario ?? baseline).counts.reviewed} sampled for review`
+              : ""
+          }`}
         />
+        {(scenario ?? baseline).slaAttainment !== null && (
+          <Tile
+            label={`SLA within ${config.slaTargetHours}h`}
+            value={fmtPct(baseline.slaAttainment ?? 0)}
+            scenarioValue={
+              scenario?.slaAttainment != null ? fmtPct(scenario.slaAttainment) : undefined
+            }
+            delta={
+              scenario?.slaAttainment != null && baseline.slaAttainment
+                ? scenario.slaAttainment / baseline.slaAttainment - 1
+                : null
+            }
+          />
+        )}
       </div>
+
+      {sens && sens.rows.length > 0 && (
+        <div className="panel" style={{ marginBottom: 14 }}>
+          <h3 className="panel__title">
+            Cycle-time sensitivity — which assumptions move the answer
+          </h3>
+          <Tornado results={sens} />
+        </div>
+      )}
 
       {compare && compare.length > 0 && (
         <div className="panel" style={{ marginBottom: 14 }}>

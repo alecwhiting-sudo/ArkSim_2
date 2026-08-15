@@ -21,6 +21,8 @@ export interface ActivityResult {
   executedAs: "human" | "agent";
   completions: number;
   escalations: number;
+  /** Cases sampled for human-in-the-loop review after agent completion. */
+  reviews: number;
   avgWaitHours: number;
   avgServiceHours: number;
 }
@@ -38,7 +40,10 @@ export interface RunResult {
     completed: number;
     inFlight: number;
     escalated: number;
+    reviewed: number;
   };
+  /** Share of measured cases completing within slaTargetHours; null if no target set. */
+  slaAttainment: number | null;
   /** End-to-end cycle time in hours. Percentiles pooled across replications. */
   cycleTimeHours: {
     mean: SummaryStat;

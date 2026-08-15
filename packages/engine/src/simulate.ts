@@ -62,6 +62,7 @@ interface ActivityStats {
   executedAs: "human" | "agent";
   completions: number;
   escalations: number;
+  reviews: number;
   waits: number[];
   services: number[];
 }
@@ -70,6 +71,7 @@ interface RepStats {
   arrived: number;
   completed: number;
   escalated: number;
+  reviewed: number;
   cycleTimes: number[];
   throughput: number;
   humanCost: number;
@@ -180,6 +182,7 @@ function runReplication(
       executedAs: mode,
       completions: 0,
       escalations: 0,
+      reviews: 0,
       waits: [],
       services: [],
     });
@@ -192,6 +195,7 @@ function runReplication(
   let arrived = 0;
   let completed = 0;
   let escalated = 0;
+  let reviewed = 0;
   let agentCost = 0;
   const cycleTimes: number[] = [];
 
@@ -293,6 +297,7 @@ function runReplication(
       }
       let nextId = activity.out;
       const esc = mode === "agent" ? activity.agent!.escalation : undefined;
+      const rev = mode === "agent" ? activity.agent!.review : undefined;
       if (esc && rng.next() < esc.probability) {
         nextId = esc.toNodeId;
         escalated++;
@@ -304,6 +309,12 @@ function runReplication(
           nodeId: activity.id,
           toNodeId: esc.toNodeId,
         });
+      } else if (rev && rng.next() < rev.probability) {
+        // Human-in-the-loop sampling: the review activity's own `out` edge
+        // continues the flow once a human has checked the agent's work.
+        nextId = rev.toNodeId;
+        reviewed++;
+        stats.reviews += measured(caseRec) ? 1 : 0;
       }
       enter(caseRec, nextId, t + serviceTime);
     });
@@ -351,6 +362,7 @@ function runReplication(
     arrived,
     completed,
     escalated,
+    reviewed,
     cycleTimes,
     throughput: cycleTimes.length / window,
     humanCost,
@@ -370,6 +382,12 @@ function aggregate(
   const totalArrived = reps.reduce((s, r) => s + r.arrived, 0);
   const totalCompleted = reps.reduce((s, r) => s + r.completed, 0);
   const totalEscalated = reps.reduce((s, r) => s + r.escalated, 0);
+  const totalReviewed = reps.reduce((s, r) => s + r.reviewed, 0);
+  const sla = config.slaTargetHours;
+  const slaAttainment =
+    sla !== undefined && allCycleTimes.length > 0
+      ? allCycleTimes.filter((c) => c <= sla).length / allCycleTimes.length
+      : null;
   const totalHuman = reps.reduce((s, r) => s + r.humanCost, 0);
   const totalAgent = reps.reduce((s, r) => s + r.agentCost, 0);
   const totalCost = totalHuman + totalAgent;
@@ -387,7 +405,9 @@ function aggregate(
       completed: totalCompleted,
       inFlight: totalArrived - totalCompleted,
       escalated: totalEscalated,
+      reviewed: totalReviewed,
     },
+    slaAttainment,
     cycleTimeHours: {
       mean: summarize(reps.map((r) => mean(r.cycleTimes))),
       p50: percentile(allCycleTimes, 50),
@@ -418,6 +438,7 @@ function aggregate(
         executedAs: perRep[0]!.executedAs,
         completions: perRep.reduce((s, a) => s + a.completions, 0),
         escalations: perRep.reduce((s, a) => s + a.escalations, 0),
+        reviews: perRep.reduce((s, a) => s + a.reviews, 0),
         avgWaitHours: mean(perRep.flatMap((a) => a.waits)),
         avgServiceHours: mean(perRep.flatMap((a) => a.services)),
       };

@@ -25,6 +25,11 @@ export const distributionSchema = z.discriminatedUnion("kind", [
     mode: z.number().nonnegative(),
     max: z.number().nonnegative(),
   }),
+  z.object({
+    kind: z.literal("empirical"),
+    /** Observed durations in hours (e.g. imported from a CSV); sampled uniformly. */
+    values: z.array(z.number().nonnegative()).min(1).max(50000),
+  }),
 ]);
 
 export type Distribution = z.infer<typeof distributionSchema>;

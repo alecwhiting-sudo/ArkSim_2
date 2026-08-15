@@ -9,6 +9,8 @@ export const runConfigSchema = z
     replications: z.number().int().min(1).max(1000).default(1),
     /** Master seed. Same model + config + seed => bit-identical results. */
     seed: z.number().int().nonnegative(),
+    /** Optional SLA: results report the share of cases completing within this. */
+    slaTargetHours: z.number().positive().optional(),
   })
   .refine((c) => c.warmupHours < c.durationHours, {
     message: "warmupHours must be less than durationHours",

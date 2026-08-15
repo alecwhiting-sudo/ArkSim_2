@@ -4,12 +4,20 @@ import { useFabStore } from "../store";
  * The scenario shelf: demand what-if multiplier, save the current workbench
  * state as a named scenario, recall or delete saved ones.
  */
-export function ScenarioBar({ onCompare }: { onCompare: () => void }) {
+export function ScenarioBar({
+  onCompare,
+  onSensitivity,
+}: {
+  onCompare: () => void;
+  onSensitivity: () => void;
+}) {
   const multiplier = useFabStore((s) => s.arrivalRateMultiplier);
   const overrideCount = useFabStore((s) => Object.keys(s.overrides).length);
   const saved = useFabStore((s) => s.savedScenarios);
   const running = useFabStore((s) => s.running);
+  const slaTarget = useFabStore((s) => s.config.slaTargetHours);
   const setMultiplier = useFabStore((s) => s.setMultiplier);
+  const setConfig = useFabStore((s) => s.setConfig);
   const saveScenarioAs = useFabStore((s) => s.saveScenarioAs);
   const applyScenario = useFabStore((s) => s.applyScenario);
   const deleteScenario = useFabStore((s) => s.deleteScenario);
@@ -38,6 +46,21 @@ export function ScenarioBar({ onCompare }: { onCompare: () => void }) {
           }}
         />
       </label>
+      <label className="scenariobar__field">
+        SLA target (h)
+        <input
+          type="number"
+          min={0}
+          step={0.5}
+          placeholder="—"
+          value={slaTarget ?? ""}
+          onChange={(e) => {
+            const raw = e.target.value;
+            const v = Number(raw);
+            setConfig({ slaTargetHours: raw === "" || v <= 0 ? undefined : v });
+          }}
+        />
+      </label>
       <span className="scenariobar__summary">
         {overrideCount > 0
           ? `${overrideCount} step${overrideCount > 1 ? "s" : ""} switched`
@@ -46,6 +69,9 @@ export function ScenarioBar({ onCompare }: { onCompare: () => void }) {
       </span>
       <button type="button" className="btn btn--small" onClick={save}>
         Save scenario
+      </button>
+      <button type="button" className="btn btn--small" onClick={onSensitivity} disabled={running}>
+        Sensitivity
       </button>
       {saved.length > 0 && <span className="scenariobar__divider" />}
       {saved.map((s) => (

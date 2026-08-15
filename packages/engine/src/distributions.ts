@@ -30,5 +30,9 @@ export function sample(d: Distribution, rng: Pcg32): number {
         ? min + Math.sqrt(u * (max - min) * (mode - min))
         : max - Math.sqrt((1 - u) * (max - min) * (max - mode));
     }
+    case "empirical": {
+      const i = Math.min(d.values.length - 1, Math.floor(rng.next() * d.values.length));
+      return d.values[i]!;
+    }
   }
 }

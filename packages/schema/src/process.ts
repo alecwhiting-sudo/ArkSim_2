@@ -35,6 +35,17 @@ export const agentProfileSchema = z.object({
       toNodeId: id,
     })
     .optional(),
+  /**
+   * Human-in-the-loop oversight: this fraction of non-escalated agent
+   * completions is routed to `toNodeId` (a human review activity, whose
+   * own `out` edge continues the flow) before proceeding.
+   */
+  review: z
+    .object({
+      probability: z.number().min(0).max(1),
+      toNodeId: id,
+    })
+    .optional(),
 });
 export type AgentProfile = z.infer<typeof agentProfileSchema>;
 
@@ -148,6 +159,9 @@ export const processModelSchema = z
         }
         if (n.agent?.escalation) {
           requireNode(n.agent.escalation.toNodeId, n.id);
+        }
+        if (n.agent?.review) {
+          requireNode(n.agent.review.toNodeId, n.id);
         }
       } else if (n.kind === "gateway") {
         let sum = 0;

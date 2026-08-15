@@ -10,6 +10,7 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 import { useMemo } from "react";
+import { primaryOf } from "../distribution-util";
 import { fmtHours } from "../format";
 import { layoutModel } from "../layout";
 import { effectiveMode, useFabStore, type ExecutionMode } from "../store";
@@ -86,18 +87,7 @@ function FabNode({ data, selected }: NodeProps<FabFlowNode>) {
 }
 
 function primaryDuration(node: Extract<ProcessNode, { kind: "activity" }>): number {
-  const d = node.human.serviceTime;
-  switch (d.kind) {
-    case "constant":
-      return d.value;
-    case "exponential":
-    case "lognormal":
-      return d.mean;
-    case "uniform":
-      return (d.min + d.max) / 2;
-    case "triangular":
-      return (d.min + d.mode + d.max) / 3;
-  }
+  return primaryOf(node.human.serviceTime);
 }
 
 const nodeTypes = { fab: FabNode };
