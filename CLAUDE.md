@@ -6,6 +6,12 @@ named ArkSim_2 for historical reasons — the product is **FabSim**.
 
 Read PLAN.md for the full build plan, roadmap, and rationale.
 
+REQUIREMENTS.md is the cumulative, implementation-independent record of what the app
+must do — kept current so the product could be re-architected from it. **Any change to
+user-visible behavior or an engine guarantee updates REQUIREMENTS.md in the same
+commit**: add numbered requirements (never renumber; mark removed ones *(retired)*) and
+append a changelog row.
+
 ## Layout
 
 - `packages/schema` — zod contracts: process models, scenarios, run config, result types. The single source of truth; everything else builds against it.
