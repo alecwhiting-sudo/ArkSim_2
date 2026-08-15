@@ -1,4 +1,4 @@
-# ArkSim — Business Process Simulation Tool: Build Plan
+# FabSim — Business Process Simulation Tool: Build Plan
 
 A desktop application that lets business analysts simulate service-industry and back-office
 processes, then model "what happens if we agentify step X" **before** committing to the change.
@@ -125,7 +125,7 @@ Per scenario, and as baseline-vs-scenario deltas:
 ### 4.2 Monorepo layout (pnpm workspaces + Turborepo)
 
 ```
-arksim/
+fabsim/
 ├── packages/
 │   ├── schema/      # Process/scenario JSON schema — zod types, validation,
 │   │                #   versioned migrations, JSON Schema export
@@ -154,7 +154,7 @@ back-office models are small; 10⁵–10⁶ events per replication runs in well 
 | Charts | ECharts (or visx) — histograms, time series, tornado charts |
 | State | Zustand + Immer; undo/redo via patch history |
 | Validation | zod (single source of truth for types + runtime validation) |
-| Persistence | `.arksim` project files (zipped JSON) via Tauri fs; autosave + recovery |
+| Persistence | `.fabsim` project files (zipped JSON) via Tauri fs; autosave + recovery |
 | RNG | PCG32 seeded generator (own ~50-line implementation, fully deterministic) |
 | Testing | Vitest, fast-check (property-based), Playwright (E2E on built app) |
 

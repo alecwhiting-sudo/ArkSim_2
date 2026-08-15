@@ -1,0 +1,108 @@
+{
+  "schemaVersion": 1,
+  "id": "invoice-processing",
+  "name": "Invoice processing (Accounts Payable)",
+  "description": "Supplier invoices arrive, are captured and matched against POs/receipts, exceptions are worked by senior AP, approved invoices are posted to the ERP. Capture, matching, and posting are agentification candidates; exception handling and approval stay human in the shipped baseline.",
+  "pools": [
+    { "id": "ap-clerks", "name": "AP clerks", "capacity": 4, "hourlyCostPerServer": 32 },
+    { "id": "senior-ap", "name": "Senior AP specialists", "capacity": 2, "hourlyCostPerServer": 45 },
+    { "id": "approvers", "name": "Approvers", "capacity": 2, "hourlyCostPerServer": 60 }
+  ],
+  "nodes": [
+    {
+      "id": "arrivals",
+      "kind": "source",
+      "name": "Invoices received",
+      "out": "capture",
+      "arrival": { "kind": "poisson", "ratePerHour": 12 }
+    },
+    {
+      "id": "capture",
+      "kind": "activity",
+      "name": "Data capture",
+      "out": "match",
+      "execution": "human",
+      "human": {
+        "poolId": "ap-clerks",
+        "serviceTime": { "kind": "lognormal", "mean": 0.12, "cv": 0.6 }
+      },
+      "agent": {
+        "serviceTime": { "kind": "constant", "value": 0.005 },
+        "costPerCase": 0.08,
+        "escalation": { "probability": 0.06, "toNodeId": "exception" }
+      }
+    },
+    {
+      "id": "match",
+      "kind": "activity",
+      "name": "2/3-way matching",
+      "out": "match-check",
+      "execution": "human",
+      "human": {
+        "poolId": "ap-clerks",
+        "serviceTime": { "kind": "lognormal", "mean": 0.15, "cv": 0.8 }
+      },
+      "agent": {
+        "serviceTime": { "kind": "constant", "value": 0.008 },
+        "costPerCase": 0.12,
+        "escalation": { "probability": 0.1, "toNodeId": "exception" }
+      }
+    },
+    {
+      "id": "match-check",
+      "kind": "gateway",
+      "name": "Match result",
+      "branches": [
+        { "to": "approve", "probability": 0.8 },
+        { "to": "exception", "probability": 0.2 }
+      ]
+    },
+    {
+      "id": "exception",
+      "kind": "activity",
+      "name": "Exception handling",
+      "out": "approve",
+      "execution": "human",
+      "human": {
+        "poolId": "senior-ap",
+        "serviceTime": { "kind": "lognormal", "mean": 0.4, "cv": 0.7 }
+      }
+    },
+    {
+      "id": "approve",
+      "kind": "activity",
+      "name": "Approval",
+      "out": "approve-check",
+      "execution": "human",
+      "human": {
+        "poolId": "approvers",
+        "serviceTime": { "kind": "triangular", "min": 0.03, "mode": 0.08, "max": 0.25 }
+      }
+    },
+    {
+      "id": "approve-check",
+      "kind": "gateway",
+      "name": "Approval decision",
+      "branches": [
+        { "to": "post", "probability": 0.95 },
+        { "to": "exception", "probability": 0.05 }
+      ]
+    },
+    {
+      "id": "post",
+      "kind": "activity",
+      "name": "Post to ERP",
+      "out": "done",
+      "execution": "human",
+      "human": {
+        "poolId": "ap-clerks",
+        "serviceTime": { "kind": "constant", "value": 0.03 }
+      },
+      "agent": {
+        "serviceTime": { "kind": "constant", "value": 0.002 },
+        "costPerCase": 0.02
+      }
+    },
+    { "id": "done", "kind": "sink", "name": "Invoice posted" }
+  ]
+}
