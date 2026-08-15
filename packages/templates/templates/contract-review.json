@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "id": "contract-review",
+  "name": "Contract review & approval",
+  "description": "Contracts get clause extraction and deviation flagging, then standard approval or full counsel review, then signature prep. Extraction and signature prep are agentification candidates; flagged extractions escalate to counsel.",
+  "pools": [
+    { "id": "paralegals", "name": "Paralegals", "capacity": 2, "hourlyCostPerServer": 40 },
+    { "id": "counsel", "name": "Legal counsel", "capacity": 2, "hourlyCostPerServer": 75 }
+  ],
+  "nodes": [
+    { "id": "arrivals", "kind": "source", "name": "Contracts submitted", "out": "extraction", "arrival": { "kind": "poisson", "ratePerHour": 1.5 } },
+    {
+      "id": "extraction", "kind": "activity", "name": "Clause extraction & flagging", "out": "deviation", "execution": "human",
+      "human": { "poolId": "paralegals", "serviceTime": { "kind": "lognormal", "mean": 0.5, "cv": 0.6 } },
+      "agent": { "serviceTime": { "kind": "constant", "value": 0.02 }, "costPerCase": 0.3, "escalation": { "probability": 0.08, "toNodeId": "counsel-review" } }
+    },
+    {
+      "id": "deviation", "kind": "gateway", "name": "Deviations found?",
+      "branches": [ { "to": "standard-approval", "probability": 0.7 }, { "to": "counsel-review", "probability": 0.3 } ]
+    },
+    {
+      "id": "standard-approval", "kind": "activity", "name": "Standard approval", "out": "signature-prep", "execution": "human",
+      "human": { "poolId": "counsel", "serviceTime": { "kind": "triangular", "min": 0.1, "mode": 0.2, "max": 0.5 } }
+    },
+    {
+      "id": "counsel-review", "kind": "activity", "name": "Counsel review & redline", "out": "signature-prep", "execution": "human",
+      "human": { "poolId": "counsel", "serviceTime": { "kind": "lognormal", "mean": 1.0, "cv": 0.6 } }
+    },
+    {
+      "id": "signature-prep", "kind": "activity", "name": "Signature preparation", "out": "done", "execution": "human",
+      "human": { "poolId": "paralegals", "serviceTime": { "kind": "constant", "value": 0.15 } },
+      "agent": { "serviceTime": { "kind": "constant", "value": 0.005 }, "costPerCase": 0.05 }
+    },
+    { "id": "done", "kind": "sink", "name": "Contract executed" }
+  ]
+}

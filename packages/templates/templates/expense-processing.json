@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "expense-processing",
+  "name": "Expense report processing",
+  "description": "Expense reports get receipts matched and policy-checked; non-compliant ones go to a manager audit before payment approval. Receipt matching and payment approval are agentification candidates.",
+  "pools": [
+    { "id": "expense-team", "name": "Expense team", "capacity": 3, "hourlyCostPerServer": 28 },
+    { "id": "finance-managers", "name": "Finance managers", "capacity": 2, "hourlyCostPerServer": 45 }
+  ],
+  "nodes": [
+    { "id": "arrivals", "kind": "source", "name": "Expense reports", "out": "receipt-match", "arrival": { "kind": "poisson", "ratePerHour": 20 } },
+    {
+      "id": "receipt-match", "kind": "activity", "name": "Receipt matching", "out": "policy", "execution": "human",
+      "human": { "poolId": "expense-team", "serviceTime": { "kind": "lognormal", "mean": 0.08, "cv": 0.6 } },
+      "agent": { "serviceTime": { "kind": "constant", "value": 0.003 }, "costPerCase": 0.03, "escalation": { "probability": 0.05, "toNodeId": "manual-audit" } }
+    },
+    {
+      "id": "policy", "kind": "gateway", "name": "Policy compliant?",
+      "branches": [ { "to": "approve-pay", "probability": 0.88 }, { "to": "manual-audit", "probability": 0.12 } ]
+    },
+    {
+      "id": "manual-audit", "kind": "activity", "name": "Manager audit", "out": "approve-pay", "execution": "human",
+      "human": { "poolId": "finance-managers", "serviceTime": { "kind": "lognormal", "mean": 0.3, "cv": 0.7 } }
+    },
+    {
+      "id": "approve-pay", "kind": "activity", "name": "Approve & pay", "out": "done", "execution": "human",
+      "human": { "poolId": "expense-team", "serviceTime": { "kind": "constant", "value": 0.03 } },
+      "agent": { "serviceTime": { "kind": "constant", "value": 0.001 }, "costPerCase": 0.01 }
+    },
+    { "id": "done", "kind": "sink", "name": "Expenses reimbursed" }
+  ]
+}

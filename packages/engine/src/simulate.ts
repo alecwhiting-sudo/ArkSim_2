@@ -20,7 +20,28 @@ export interface SimulateOptions {
   scenario?: Scenario;
 }
 
+/**
+ * One observable moment in a replication, for the app's replay/watch mode.
+ * Emitted in chronological order. Observing a run never changes its outcome —
+ * the observer draws no randomness.
+ */
+export type TraceEvent =
+  | { t: number; kind: "arrive"; caseId: number; nodeId: string }
+  | { t: number; kind: "enqueue"; caseId: number; nodeId: string; poolId: string }
+  | { t: number; kind: "start"; caseId: number; nodeId: string; poolId: string; fromQueue: boolean }
+  | { t: number; kind: "complete"; caseId: number; nodeId: string; poolId: string }
+  | { t: number; kind: "escalate"; caseId: number; nodeId: string; toNodeId: string }
+  | { t: number; kind: "exit"; caseId: number; nodeId: string };
+
+export interface TraceResult {
+  events: TraceEvent[];
+  durationHours: number;
+}
+
+type TraceObserver = (e: TraceEvent) => void;
+
 interface CaseRec {
+  id: number;
   arrivedAt: number;
 }
 
@@ -75,6 +96,21 @@ export function simulate(opts: SimulateOptions): RunResult {
   return aggregate(model, config, scenario, reps);
 }
 
+/**
+ * Run a single replication (replication 0 of the same seed, so it matches the
+ * first replication of a normal run exactly) and record every case movement.
+ */
+export function simulateTrace(opts: SimulateOptions): TraceResult {
+  const model = processModelSchema.parse(opts.model);
+  const config = runConfigSchema.parse(opts.config);
+  const scenario = opts.scenario ? scenarioSchema.parse(opts.scenario) : undefined;
+  const events: TraceEvent[] = [];
+  runReplication(model, config, scenario, deriveReplicationSeed(config.seed, 0), (e) =>
+    events.push(e),
+  );
+  return { events, durationHours: config.durationHours };
+}
+
 function resolveExecution(activity: ActivityNode, scenario?: Scenario): "human" | "agent" {
   const override = scenario?.overrides.find((o) => o.activityId === activity.id);
   const mode = override?.execution ?? activity.execution;
@@ -91,6 +127,7 @@ function runReplication(
   config: RunConfig,
   scenario: Scenario | undefined,
   seed: bigint,
+  observe?: TraceObserver,
 ): RepStats {
   const rng = new Pcg32(seed);
   const { durationHours: end, warmupHours: warmup } = config;
@@ -180,6 +217,7 @@ function runReplication(
           startService(caseRec, node, pool, t, t);
         } else {
           pool.queue.push({ caseRec, activity: node, enqueuedAt: t });
+          observe?.({ t, kind: "enqueue", caseId: caseRec.id, nodeId: node.id, poolId: pool.id });
         }
         return;
       }
@@ -199,6 +237,7 @@ function runReplication(
       case "sink": {
         completed++;
         if (measured(caseRec)) cycleTimes.push(t - caseRec.arrivedAt);
+        observe?.({ t, kind: "exit", caseId: caseRec.id, nodeId: node.id });
         return;
       }
       case "source":
@@ -221,6 +260,14 @@ function runReplication(
       stats.waits.push(wait);
       pool.waits.push(wait);
     }
+    observe?.({
+      t,
+      kind: "start",
+      caseId: caseRec.id,
+      nodeId: activity.id,
+      poolId: pool.id,
+      fromQueue: enqueuedAt < t,
+    });
     pool.busy++;
     const dist = mode === "human" ? activity.human.serviceTime : activity.agent!.serviceTime;
     const serviceTime = sample(dist, rng);
@@ -232,6 +279,13 @@ function runReplication(
       if (mode === "agent" && measured(caseRec)) {
         agentCost += activity.agent!.costPerCase;
       }
+      observe?.({
+        t: t + serviceTime,
+        kind: "complete",
+        caseId: caseRec.id,
+        nodeId: activity.id,
+        poolId: pool.id,
+      });
       // Hand the freed server to the next queued case before routing onward.
       if (pool.queue.length > 0 && pool.busy < pool.capacity) {
         const e = pool.queue.shift()!;
@@ -243,6 +297,13 @@ function runReplication(
         nextId = esc.toNodeId;
         escalated++;
         stats.escalations += measured(caseRec) ? 1 : 0;
+        observe?.({
+          t: t + serviceTime,
+          kind: "escalate",
+          caseId: caseRec.id,
+          nodeId: activity.id,
+          toNodeId: esc.toNodeId,
+        });
       }
       enter(caseRec, nextId, t + serviceTime);
     });
@@ -254,7 +315,8 @@ function runReplication(
     const scheduleArrival = (t: number) => {
       schedule(t, () => {
         arrived++;
-        const caseRec: CaseRec = { arrivedAt: t };
+        const caseRec: CaseRec = { id: arrived, arrivedAt: t };
+        observe?.({ t, kind: "arrive", caseId: caseRec.id, nodeId: node.id });
         scheduleArrival(t - Math.log(rng.next()) / rate);
         enter(caseRec, node.out, t);
       });

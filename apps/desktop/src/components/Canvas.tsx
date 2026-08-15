@@ -19,6 +19,8 @@ type FabFlowNode = Node<FabNodeData, "fab">;
 
 function FabNode({ data, selected }: NodeProps<FabFlowNode>) {
   const setOverride = useFabStore((s) => s.setOverride);
+  const live = useFabStore((s) => s.watchSnap?.nodes[data.pnode.id]);
+  const watching = useFabStore((s) => s.watchSnap !== null);
   const { pnode, mode, overridden } = data;
 
   const toggle = (next: ExecutionMode) => (e: React.MouseEvent) => {
@@ -63,7 +65,15 @@ function FabNode({ data, selected }: NodeProps<FabFlowNode>) {
           ) : (
             <div className="fab-node__meta fab-node__meta--dim">human only</div>
           )}
-          {overridden && <div className="fab-node__badge">scenario change</div>}
+          {overridden && !watching && <div className="fab-node__badge">scenario change</div>}
+          {watching && live && (
+            <div className="fab-node__live">
+              <span className="fab-node__busy">working {live.busy}</span>
+              <span className={`fab-node__queue${live.queue > 0 ? " has-queue" : ""}`}>
+                queue {live.queue}
+              </span>
+            </div>
+          )}
         </>
       )}
       {pnode.kind === "gateway" && (
@@ -96,6 +106,7 @@ export function Canvas() {
   const model = useFabStore((s) => s.model);
   const overrides = useFabStore((s) => s.overrides);
   const select = useFabStore((s) => s.select);
+  const flowing = useFabStore((s) => s.watchPlaying);
 
   const { nodes, edges } = useMemo(() => {
     const positions = layoutModel(model);
@@ -134,8 +145,9 @@ export function Canvas() {
         }
       }
     }
-    return { nodes, edges };
-  }, [model, overrides]);
+    // During playback, animate the edges so flow direction reads at a glance.
+    return { nodes, edges: edges.map((e) => ({ ...e, animated: flowing })) };
+  }, [model, overrides, flowing]);
 
   return (
     <div className="canvas-wrap">

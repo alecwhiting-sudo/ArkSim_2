@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "id": "procure-to-pay",
+  "name": "Procure-to-pay",
+  "description": "Requisitions are validated, approved, turned into POs, and receipts matched. Validation, PO creation, and receipt matching are agentification candidates; exceptions route to a senior buyer review that re-enters at approval.",
+  "pools": [
+    { "id": "procurement", "name": "Procurement team", "capacity": 3, "hourlyCostPerServer": 34 },
+    { "id": "approvers", "name": "Budget approvers", "capacity": 2, "hourlyCostPerServer": 50 },
+    { "id": "senior-buyers", "name": "Senior buyers", "capacity": 1, "hourlyCostPerServer": 48 }
+  ],
+  "nodes": [
+    { "id": "arrivals", "kind": "source", "name": "Requisitions raised", "out": "req-validate", "arrival": { "kind": "poisson", "ratePerHour": 4 } },
+    {
+      "id": "req-validate", "kind": "activity", "name": "Requisition validation", "out": "approval", "execution": "human",
+      "human": { "poolId": "procurement", "serviceTime": { "kind": "lognormal", "mean": 0.2, "cv": 0.6 } },
+      "agent": { "serviceTime": { "kind": "constant", "value": 0.006 }, "costPerCase": 0.08, "escalation": { "probability": 0.06, "toNodeId": "buyer-review" } }
+    },
+    {
+      "id": "approval", "kind": "activity", "name": "Budget approval", "out": "po-create", "execution": "human",
+      "human": { "poolId": "approvers", "serviceTime": { "kind": "triangular", "min": 0.05, "mode": 0.12, "max": 0.3 } }
+    },
+    {
+      "id": "po-create", "kind": "activity", "name": "PO creation", "out": "receipt-match", "execution": "human",
+      "human": { "poolId": "procurement", "serviceTime": { "kind": "lognormal", "mean": 0.25, "cv": 0.5 } },
+      "agent": { "serviceTime": { "kind": "constant", "value": 0.008 }, "costPerCase": 0.1, "escalation": { "probability": 0.08, "toNodeId": "buyer-review" } }
+    },
+    {
+      "id": "receipt-match", "kind": "activity", "name": "Receipt matching", "out": "done", "execution": "human",
+      "human": { "poolId": "procurement", "serviceTime": { "kind": "lognormal", "mean": 0.15, "cv": 0.7 } },
+      "agent": { "serviceTime": { "kind": "constant", "value": 0.005 }, "costPerCase": 0.08, "escalation": { "probability": 0.1, "toNodeId": "buyer-review" } }
+    },
+    {
+      "id": "buyer-review", "kind": "activity", "name": "Senior buyer review", "out": "approval", "execution": "human",
+      "human": { "poolId": "senior-buyers", "serviceTime": { "kind": "lognormal", "mean": 0.35, "cv": 0.6 } }
+    },
+    { "id": "done", "kind": "sink", "name": "Invoice cleared for payment" }
+  ]
+}

@@ -2,6 +2,7 @@ import type { RunResult } from "@fabsim/schema";
 import { fmtHours, fmtMoney, fmtNum, fmtPct } from "../format";
 import { useFabStore } from "../store";
 
+
 /**
  * Results dashboard: KPI stat tiles with baseline→scenario deltas, per-pool
  * utilization meters, and a per-activity table. Values are always labeled in
@@ -10,16 +11,23 @@ import { useFabStore } from "../store";
 export function Dashboard() {
   const baseline = useFabStore((s) => s.baseline);
   const scenario = useFabStore((s) => s.scenario);
+  const compare = useFabStore((s) => s.compareResults);
   const stale = useFabStore((s) => s.resultsStale);
   const model = useFabStore((s) => s.model);
 
   if (!baseline) {
     return (
       <section className="dashboard dashboard--empty">
-        <p>No results yet — press Run to simulate the baseline and your scenario.</p>
+        <p>
+          No results yet — press Run to simulate the baseline and your scenario, or Watch to see
+          the process flowing live.
+        </p>
       </section>
     );
   }
+
+  const ciHalf = (r: RunResult) =>
+    (r.cycleTimeHours.mean.ci95[1] - r.cycleTimeHours.mean.ci95[0]) / 2;
 
   const declaredPools = new Set(model.pools.map((p) => p.id));
 
@@ -35,7 +43,7 @@ export function Dashboard() {
           scenarioValue={scenario ? fmtHours(scenario.cycleTimeHours.mean.mean) : undefined}
           delta={ratio(scenario?.cycleTimeHours.mean.mean, baseline.cycleTimeHours.mean.mean)}
           downIsGood
-          sub={`P90 ${fmtHours(baseline.cycleTimeHours.p90)}${scenario ? ` → ${fmtHours(scenario.cycleTimeHours.p90)}` : ""}`}
+          sub={`P90 ${fmtHours(baseline.cycleTimeHours.p90)}${scenario ? ` → ${fmtHours(scenario.cycleTimeHours.p90)}` : ""} · ±${fmtHours(ciHalf(scenario ?? baseline))} (95% CI)`}
         />
         <Tile
           label="Throughput"
@@ -62,6 +70,50 @@ export function Dashboard() {
           sub="cases handed back by agents"
         />
       </div>
+
+      {compare && compare.length > 0 && (
+        <div className="panel" style={{ marginBottom: 14 }}>
+          <h3 className="panel__title">Scenario comparison</h3>
+          <div className="tablewrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Scenario</th>
+                  <th>Cycle time</th>
+                  <th>P90</th>
+                  <th>Throughput</th>
+                  <th>Cost/case</th>
+                  <th>Escalated</th>
+                  <th>Hottest pool</th>
+                </tr>
+              </thead>
+              <tbody>
+                {compare.map(({ name, result }) => {
+                  const hottest = result.pools
+                    .filter((p) => p.utilization !== null)
+                    .reduce(
+                      (best, p) => (p.utilization! > (best?.utilization ?? -1) ? p : best),
+                      null as (typeof result.pools)[number] | null,
+                    );
+                  return (
+                    <tr key={name}>
+                      <td>{name}</td>
+                      <td className="num">{fmtHours(result.cycleTimeHours.mean.mean)}</td>
+                      <td className="num">{fmtHours(result.cycleTimeHours.p90)}</td>
+                      <td className="num">{fmtNum(result.throughputPerHour.mean)}/h</td>
+                      <td className="num">{fmtMoney(result.cost.perCase)}</td>
+                      <td className="num">{result.counts.escalated || "—"}</td>
+                      <td className="num">
+                        {hottest ? `${poolName(hottest.poolId)} ${fmtPct(hottest.utilization!)}` : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div className="dashboard__cols">
         <div className="panel">

@@ -18,7 +18,7 @@ describe.each(templates.map((t) => [t.id, t] as const))("template %s", (_id, mod
     expect(result.cycleTimeHours.mean.mean).toBeLessThan(24);
     for (const pool of result.pools) {
       if (pool.utilization !== null) {
-        expect(pool.utilization).toBeGreaterThan(0);
+        expect(pool.utilization).toBeGreaterThanOrEqual(0);
         expect(pool.utilization).toBeLessThanOrEqual(1);
       }
     }

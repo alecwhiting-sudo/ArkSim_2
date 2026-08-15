@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "id": "loan-processing",
+  "name": "Loan / credit application processing",
+  "description": "Applications are captured, documents verified, and underwritten; a share goes to senior review before the offer is issued. Intake, verification, and offer issuance are agentification candidates; escalations land on the underwriting queue.",
+  "pools": [
+    { "id": "processors", "name": "Loan processors", "capacity": 4, "hourlyCostPerServer": 35 },
+    { "id": "underwriters", "name": "Underwriters", "capacity": 3, "hourlyCostPerServer": 55 }
+  ],
+  "nodes": [
+    { "id": "arrivals", "kind": "source", "name": "Applications received", "out": "intake", "arrival": { "kind": "poisson", "ratePerHour": 5 } },
+    {
+      "id": "intake", "kind": "activity", "name": "Application intake", "out": "verification", "execution": "human",
+      "human": { "poolId": "processors", "serviceTime": { "kind": "lognormal", "mean": 0.25, "cv": 0.6 } },
+      "agent": { "serviceTime": { "kind": "constant", "value": 0.008 }, "costPerCase": 0.15, "escalation": { "probability": 0.06, "toNodeId": "underwrite" } }
+    },
+    {
+      "id": "verification", "kind": "activity", "name": "Document verification", "out": "underwrite", "execution": "human",
+      "human": { "poolId": "processors", "serviceTime": { "kind": "lognormal", "mean": 0.3, "cv": 0.7 } },
+      "agent": { "serviceTime": { "kind": "constant", "value": 0.01 }, "costPerCase": 0.2, "escalation": { "probability": 0.1, "toNodeId": "underwrite" } }
+    },
+    {
+      "id": "underwrite", "kind": "activity", "name": "Underwriting", "out": "decision", "execution": "human",
+      "human": { "poolId": "underwriters", "serviceTime": { "kind": "lognormal", "mean": 0.45, "cv": 0.6 } }
+    },
+    {
+      "id": "decision", "kind": "gateway", "name": "Decision",
+      "branches": [ { "to": "offer", "probability": 0.9 }, { "to": "senior-review", "probability": 0.1 } ]
+    },
+    {
+      "id": "senior-review", "kind": "activity", "name": "Senior credit review", "out": "offer", "execution": "human",
+      "human": { "poolId": "underwriters", "serviceTime": { "kind": "lognormal", "mean": 0.5, "cv": 0.5 } }
+    },
+    {
+      "id": "offer", "kind": "activity", "name": "Issue offer & documents", "out": "done", "execution": "human",
+      "human": { "poolId": "processors", "serviceTime": { "kind": "constant", "value": 0.1 } },
+      "agent": { "serviceTime": { "kind": "constant", "value": 0.003 }, "costPerCase": 0.05 }
+    },
+    { "id": "done", "kind": "sink", "name": "Application decided" }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "it-service-desk",
+  "name": "IT service desk incident management",
+  "description": "Incidents are categorized, then resolved at L1 for known issues or L2 for complex ones. Categorization and L1 resolution are agentification candidates; escalations land on L2.",
+  "pools": [
+    { "id": "sd-l1", "name": "Service desk L1", "capacity": 9, "hourlyCostPerServer": 26 },
+    { "id": "sd-l2", "name": "Service desk L2", "capacity": 5, "hourlyCostPerServer": 42 }
+  ],
+  "nodes": [
+    { "id": "arrivals", "kind": "source", "name": "Incidents reported", "out": "categorize", "arrival": { "kind": "poisson", "ratePerHour": 30 } },
+    {
+      "id": "categorize", "kind": "activity", "name": "Categorize & prioritize", "out": "route", "execution": "human",
+      "human": { "poolId": "sd-l1", "serviceTime": { "kind": "lognormal", "mean": 0.05, "cv": 0.5 } },
+      "agent": { "serviceTime": { "kind": "constant", "value": 0.002 }, "costPerCase": 0.02, "escalation": { "probability": 0.03, "toNodeId": "l2-resolve" } }
+    },
+    {
+      "id": "route", "kind": "gateway", "name": "Known issue?",
+      "branches": [ { "to": "l1-resolve", "probability": 0.75 }, { "to": "l2-resolve", "probability": 0.25 } ]
+    },
+    {
+      "id": "l1-resolve", "kind": "activity", "name": "L1 resolution", "out": "done", "execution": "human",
+      "human": { "poolId": "sd-l1", "serviceTime": { "kind": "lognormal", "mean": 0.2, "cv": 0.8 } },
+      "agent": { "serviceTime": { "kind": "constant", "value": 0.008 }, "costPerCase": 0.12, "escalation": { "probability": 0.06, "toNodeId": "l2-resolve" } }
+    },
+    {
+      "id": "l2-resolve", "kind": "activity", "name": "L2 resolution", "out": "done", "execution": "human",
+      "human": { "poolId": "sd-l2", "serviceTime": { "kind": "lognormal", "mean": 0.45, "cv": 0.7 } }
+    },
+    { "id": "done", "kind": "sink", "name": "Incident resolved" }
+  ]
+}

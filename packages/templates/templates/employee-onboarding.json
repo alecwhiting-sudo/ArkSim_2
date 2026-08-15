@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "id": "employee-onboarding",
+  "name": "Employee onboarding (HR)",
+  "description": "New joiners have documents collected, accounts and equipment provisioned, and orientation scheduled. Document collection, provisioning requests, and scheduling are agentification candidates; exceptions route to manual HR/IT queues.",
+  "pools": [
+    { "id": "hr-coordinators", "name": "HR coordinators", "capacity": 2, "hourlyCostPerServer": 30 },
+    { "id": "it-ops", "name": "IT operations", "capacity": 2, "hourlyCostPerServer": 35 }
+  ],
+  "nodes": [
+    { "id": "arrivals", "kind": "source", "name": "New joiners", "out": "doc-collection", "arrival": { "kind": "poisson", "ratePerHour": 2 } },
+    {
+      "id": "doc-collection", "kind": "activity", "name": "Document collection", "out": "provisioning", "execution": "human",
+      "human": { "poolId": "hr-coordinators", "serviceTime": { "kind": "lognormal", "mean": 0.4, "cv": 0.6 } },
+      "agent": { "serviceTime": { "kind": "constant", "value": 0.01 }, "costPerCase": 0.1, "escalation": { "probability": 0.05, "toNodeId": "doc-review" } }
+    },
+    {
+      "id": "doc-review", "kind": "activity", "name": "Manual document review", "out": "provisioning", "execution": "human",
+      "human": { "poolId": "hr-coordinators", "serviceTime": { "kind": "lognormal", "mean": 0.3, "cv": 0.5 } }
+    },
+    {
+      "id": "provisioning", "kind": "activity", "name": "Account & equipment provisioning", "out": "orientation", "execution": "human",
+      "human": { "poolId": "it-ops", "serviceTime": { "kind": "lognormal", "mean": 0.5, "cv": 0.5 } },
+      "agent": { "serviceTime": { "kind": "constant", "value": 0.02 }, "costPerCase": 0.15, "escalation": { "probability": 0.1, "toNodeId": "manual-provisioning" } }
+    },
+    {
+      "id": "manual-provisioning", "kind": "activity", "name": "Manual provisioning", "out": "orientation", "execution": "human",
+      "human": { "poolId": "it-ops", "serviceTime": { "kind": "lognormal", "mean": 0.6, "cv": 0.5 } }
+    },
+    {
+      "id": "orientation", "kind": "activity", "name": "Orientation scheduling", "out": "done", "execution": "human",
+      "human": { "poolId": "hr-coordinators", "serviceTime": { "kind": "lognormal", "mean": 0.2, "cv": 0.5 } },
+      "agent": { "serviceTime": { "kind": "constant", "value": 0.005 }, "costPerCase": 0.05 }
+    },
+    { "id": "done", "kind": "sink", "name": "Onboarding complete" }
+  ]
+}

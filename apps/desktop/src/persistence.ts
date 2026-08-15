@@ -5,7 +5,14 @@ import {
   type RunConfig,
 } from "@fabsim/schema";
 import { z } from "zod";
-import type { ExecutionMode } from "./store";
+import type { ExecutionMode, SavedScenario } from "./store";
+
+const savedScenarioSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  overrides: z.record(z.enum(["human", "agent"])).default({}),
+  arrivalRateMultiplier: z.number().positive().default(1),
+});
 
 const projectFileSchema = z.object({
   app: z.literal("fabsim"),
@@ -13,17 +20,29 @@ const projectFileSchema = z.object({
   model: processModelSchema,
   overrides: z.record(z.enum(["human", "agent"])).default({}),
   config: runConfigSchema,
+  savedScenarios: z.array(savedScenarioSchema).default([]),
+  arrivalRateMultiplier: z.number().positive().default(1),
 });
 
 export interface ProjectFile {
   model: ProcessModel;
   overrides: Record<string, ExecutionMode>;
   config: RunConfig;
+  savedScenarios: SavedScenario[];
+  arrivalRateMultiplier: number;
 }
 
 export function serializeProject(p: ProjectFile): string {
   return JSON.stringify(
-    { app: "fabsim", fileVersion: 1, model: p.model, overrides: p.overrides, config: p.config },
+    {
+      app: "fabsim",
+      fileVersion: 1,
+      model: p.model,
+      overrides: p.overrides,
+      config: p.config,
+      savedScenarios: p.savedScenarios,
+      arrivalRateMultiplier: p.arrivalRateMultiplier,
+    },
     null,
     2,
   );
@@ -31,7 +50,13 @@ export function serializeProject(p: ProjectFile): string {
 
 export function parseProject(text: string): ProjectFile {
   const parsed = projectFileSchema.parse(JSON.parse(text));
-  return { model: parsed.model, overrides: parsed.overrides, config: parsed.config };
+  return {
+    model: parsed.model,
+    overrides: parsed.overrides,
+    config: parsed.config,
+    savedScenarios: parsed.savedScenarios,
+    arrivalRateMultiplier: parsed.arrivalRateMultiplier,
+  };
 }
 
 /** Save via a download — works in the browser and in the Tauri webview. */

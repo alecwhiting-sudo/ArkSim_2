@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "id": "recruitment-screening",
+  "name": "Recruitment screening",
+  "description": "Applications are CV-screened; a shortlist gets interviews scheduled and hiring-manager review, the rest get rejection notices. Screening, scheduling, and notifications are agentification candidates; uncertain screens escalate to a recruiter review.",
+  "pools": [
+    { "id": "recruiters", "name": "Recruiters", "capacity": 4, "hourlyCostPerServer": 33 },
+    { "id": "hiring-managers", "name": "Hiring managers", "capacity": 2, "hourlyCostPerServer": 60 }
+  ],
+  "nodes": [
+    { "id": "arrivals", "kind": "source", "name": "Applications received", "out": "cv-screen", "arrival": { "kind": "poisson", "ratePerHour": 12 } },
+    {
+      "id": "cv-screen", "kind": "activity", "name": "CV parsing & screening", "out": "shortlist", "execution": "human",
+      "human": { "poolId": "recruiters", "serviceTime": { "kind": "lognormal", "mean": 0.15, "cv": 0.7 } },
+      "agent": { "serviceTime": { "kind": "constant", "value": 0.004 }, "costPerCase": 0.05, "escalation": { "probability": 0.06, "toNodeId": "recruiter-review" } }
+    },
+    {
+      "id": "shortlist", "kind": "gateway", "name": "Shortlisted?",
+      "branches": [ { "to": "schedule", "probability": 0.35 }, { "to": "reject-notify", "probability": 0.65 } ]
+    },
+    {
+      "id": "reject-notify", "kind": "activity", "name": "Rejection notice", "out": "done", "execution": "human",
+      "human": { "poolId": "recruiters", "serviceTime": { "kind": "constant", "value": 0.03 } },
+      "agent": { "serviceTime": { "kind": "constant", "value": 0.001 }, "costPerCase": 0.01 }
+    },
+    {
+      "id": "schedule", "kind": "activity", "name": "Interview scheduling", "out": "hm-review", "execution": "human",
+      "human": { "poolId": "recruiters", "serviceTime": { "kind": "lognormal", "mean": 0.2, "cv": 0.6 } },
+      "agent": { "serviceTime": { "kind": "constant", "value": 0.006 }, "costPerCase": 0.08, "escalation": { "probability": 0.08, "toNodeId": "recruiter-review" } }
+    },
+    {
+      "id": "recruiter-review", "kind": "activity", "name": "Recruiter review", "out": "schedule", "execution": "human",
+      "human": { "poolId": "recruiters", "serviceTime": { "kind": "lognormal", "mean": 0.35, "cv": 0.6 } }
+    },
+    {
+      "id": "hm-review", "kind": "activity", "name": "Hiring manager review", "out": "done", "execution": "human",
+      "human": { "poolId": "hiring-managers", "serviceTime": { "kind": "lognormal", "mean": 0.3, "cv": 0.6 } }
+    },
+    { "id": "done", "kind": "sink", "name": "Screening complete" }
+  ]
+}
